@@ -1,0 +1,10 @@
+{{define "login"}}<!doctype html><html lang="es" data-bs-theme="light">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Acceso · Dataset TTS</title>
+<link rel="stylesheet" href="/static/vendor/bootstrap-icons/bootstrap-icons.min.css"><link rel="stylesheet" href="/static/vendor/adminlte/css/adminlte.min.css"></head>
+<body class="login-page bg-body-secondary"><main class="login-box"><h1 class="login-logo"><b>Dataset</b> TTS</h1>
+<div class="card"><div class="card-body login-card-body"><p class="login-box-msg">Accede al panel de administración</p>
+{{if .Notice}}<div class="alert alert-danger" role="alert">{{.Notice}}</div>{{end}}
+<form action="/login" method="post"><div class="input-group mb-3"><input type="text" class="form-control" name="username" required autocomplete="username" placeholder="Usuario" aria-label="Usuario"><div class="input-group-text"><i class="bi bi-person"></i></div></div>
+<div class="input-group mb-3"><input type="password" class="form-control" name="password" required autocomplete="current-password" placeholder="Contraseña" aria-label="Contraseña"><div class="input-group-text"><i class="bi bi-lock"></i></div></div>
+<button type="submit" class="btn btn-primary w-100">Iniciar sesión</button></form></div></div></main>
+<script src="/static/vendor/bootstrap/bootstrap.bundle.min.js"></script><script src="/static/vendor/adminlte/js/adminlte.min.js"></script></body></html>{{end}}

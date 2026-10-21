@@ -1,0 +1,18 @@
+{{define "content"}}
+<div class="row g-3">
+<div class="col-lg-3 col-6"><div class="small-box text-bg-primary"><div class="inner"><h3>{{.Stats.Total}}</h3><p>Registros totales</p></div><i class="small-box-icon bi bi-collection"></i><a href="/jobs" class="small-box-footer link-light">Ver registros <i class="bi bi-arrow-right-circle"></i></a></div></div>
+<div class="col-lg-3 col-6"><div class="small-box text-bg-warning"><div class="inner"><h3>{{.Stats.Pending}}</h3><p>Pendientes</p></div><i class="small-box-icon bi bi-hourglass-split"></i><a href="/jobs?status=pending" class="small-box-footer link-dark">Ver pendientes <i class="bi bi-arrow-right-circle"></i></a></div></div>
+<div class="col-lg-3 col-6"><div class="small-box text-bg-info"><div class="inner"><h3>{{.Stats.Processing}}</h3><p>En proceso</p></div><i class="small-box-icon bi bi-cpu"></i><a href="/jobs?status=processing" class="small-box-footer link-dark">Ver instancias <i class="bi bi-arrow-right-circle"></i></a></div></div>
+<div class="col-lg-3 col-6"><div class="small-box text-bg-success"><div class="inner"><h3>{{.Stats.Completed}}</h3><p>Terminados</p></div><i class="small-box-icon bi bi-check2-circle"></i><a href="/jobs?status=completed" class="small-box-footer link-light">Ver completados <i class="bi bi-arrow-right-circle"></i></a></div></div>
+</div>
+<div class="row g-3">
+<div class="col-lg-8"><div class="card"><div class="card-header"><h3 class="card-title">Progreso del dataset</h3></div>
+<div class="card-body"><div class="d-flex justify-content-between"><span>Audio generado</span><strong>{{percent .Stats.Completed .Stats.Total}}%</strong></div>
+<div class="progress mb-4" role="progressbar" aria-label="Porcentaje completado" aria-valuenow="{{percent .Stats.Completed .Stats.Total}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-success" style="width:{{percent .Stats.Completed .Stats.Total}}%"></div></div>
+<h5>Trabajos recientes</h5><div class="table-responsive"><table class="table table-striped table-sm"><thead><tr><th>Archivo</th><th>Texto</th><th>Estado</th></tr></thead><tbody>
+{{range .Jobs}}<tr><td>{{.Filename}}</td><td>{{short .Text 85}}</td><td>{{.Status}}</td></tr>{{else}}<tr><td colspan="3" class="text-center text-secondary py-4">Importa un CSV para comenzar</td></tr>{{end}}
+</tbody></table></div></div><div class="card-footer"><a href="/jobs" class="btn btn-outline-primary btn-sm">Todos los trabajos</a></div></div></div>
+<div class="col-lg-4"><div class="card"><div class="card-header"><h3 class="card-title">Errores</h3></div><div class="card-body"><div class="d-flex align-items-center justify-content-between"><span>Trabajos con error</span><h2 class="mb-0 text-danger">{{.Stats.Failed}}</h2></div><p class="text-body-secondary mt-3 mb-0">Los trabajos vencidos se reintentan hasta agotar los intentos configurados.</p></div><div class="card-footer"><a href="/jobs?status=failed" class="btn btn-outline-danger btn-sm">Revisar errores</a></div></div>
+<div class="card"><div class="card-body"><h5 class="card-title">Exportación</h5><p class="card-text">ZIP con los WAV terminados y metadata.csv en formato nombre|texto.</p><a href="/export" class="btn btn-primary"><i class="bi bi-download me-1"></i> Descargar dataset</a></div></div></div>
+</div>
+{{end}}

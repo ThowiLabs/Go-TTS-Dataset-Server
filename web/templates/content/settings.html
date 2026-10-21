@@ -1,0 +1,10 @@
+{{define "content"}}
+<div class="row g-3"><div class="col-lg-6"><div class="card"><div class="card-header"><h3 class="card-title">Importar dataset CSV</h3></div><div class="card-body">
+<p>Importa registros en formato <code>1.wav|Texto de ejemplo</code>. Se aceptan CSV separados por <code>|</code> o por coma y se omiten nombres duplicados.</p>
+<form method="post" action="/import" enctype="multipart/form-data"><input type="hidden" name="_csrf" value="{{.CSRF}}"><label for="csv" class="form-label">Archivo de metadatos</label><input id="csv" class="form-control mb-3" type="file" name="csv" accept=".csv,text/csv,.txt" required><button type="submit" class="btn btn-primary"><i class="bi bi-upload me-1"></i> Importar CSV</button></form>
+</div></div></div>
+<div class="col-lg-6"><div class="card"><div class="card-header"><h3 class="card-title">Voz de referencia</h3></div><div class="card-body">
+{{if .HasReference}}<p class="text-success"><i class="bi bi-check-circle me-1"></i> Voz disponible · actualizada {{date .Reference.UpdatedAt}}</p><div class="mb-3"><audio controls preload="none" class="w-100" src="/reference.wav"></audio></div><p class="small text-secondary">SHA256: <code>{{.Reference.SHA256}}</code></p>{{else}}<p class="text-body-secondary">Aún no se ha cargado una voz de referencia.</p>{{end}}
+<form method="post" action="/reference" enctype="multipart/form-data"><input type="hidden" name="_csrf" value="{{.CSRF}}"><label for="ref" class="form-label">Archivo WAV (máx. 25 MiB)</label><input id="ref" class="form-control mb-3" type="file" name="reference" accept=".wav,audio/wav" required><button type="submit" class="btn btn-primary"><i class="bi bi-soundwave me-1"></i> Guardar referencia</button></form>
+</div></div></div></div>
+{{end}}

@@ -1,0 +1,3 @@
+AdminLTE 4.10.1: https://github.com/ColorlibHQ/AdminLTE/releases/tag/v4.10.1
+MIT License: https://github.com/ColorlibHQ/AdminLTE/blob/master/LICENSE
+Bootstrap 5.3.8 and Bootstrap Icons 1.13.1, locally cached.

@@ -1,0 +1,13 @@
+{{define "content"}}
+<div class="card"><div class="card-header"><h3 class="card-title">Clientes conectados anteriormente</h3></div><div class="card-body table-responsive"><table class="table table-striped"><thead><tr><th>Instancia</th><th>Última actividad</th><th>Reservados</th><th>Terminados</th></tr></thead><tbody>{{range .Workers}}<tr><td>{{.ID}}</td><td>{{date .LastSeen}}</td><td>{{.Claimed}}</td><td>{{.Completed}}</td></tr>{{else}}<tr><td colspan="4" class="text-center py-4">Sin instancias registradas</td></tr>{{end}}</tbody></table></div></div>
+<div class="card"><div class="card-header"><h3 class="card-title">Conexión de instancias</h3></div><div class="card-body"><p>Usa el encabezado <code>Authorization: Bearer &lt;WORKER_API_KEY&gt;</code> en todos los endpoints de workers. Cada instancia debe usar su propio <code>worker_id</code>.</p>
+<div class="table-responsive"><table class="table table-bordered"><thead><tr><th>Método</th><th>Endpoint</th><th>Función</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/api/v1/reference/meta</code></td><td>Hash y versión del audio</td></tr>
+<tr><td>GET</td><td><code>/api/v1/reference</code></td><td>Descargar WAV compartido</td></tr>
+<tr><td>POST</td><td><code>/api/v1/jobs/claim</code></td><td>Reservar siguiente pendiente</td></tr>
+<tr><td>POST</td><td><code>/api/v1/jobs/{id}/heartbeat</code></td><td>Renovar reserva vigente</td></tr>
+<tr><td>POST</td><td><code>/api/v1/jobs/{id}/complete</code></td><td>Subir WAV generado</td></tr>
+<tr><td>POST</td><td><code>/api/v1/jobs/{id}/fail</code></td><td>Informar error y reintentar</td></tr>
+<tr><td>GET</td><td><code>/api/v1/stats</code></td><td>Estadísticas generales</td></tr>
+</tbody></table></div><p class="text-body-secondary mb-0">Renueva la reserva antes de que expire. Cada respuesta de claim contiene el token de la reserva. Si no quedan trabajos, devuelve HTTP 204.</p></div></div>
+{{end}}

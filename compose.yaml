@@ -1,0 +1,14 @@
+services:
+  datasets:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+      LISTEN_ADDR: ":8080"
+    volumes:
+      - datasets_data:/data
+    restart: unless-stopped
+volumes:
+  datasets_data:

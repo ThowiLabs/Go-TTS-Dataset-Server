@@ -1,0 +1,12 @@
+{{define "content"}}
+<div class="card"><div class="card-header"><div class="d-flex flex-wrap align-items-center justify-content-between gap-2"><h3 class="card-title">Listado paginado</h3>
+<div class="btn-group btn-group-sm" role="group" aria-label="Filtrar"><a class="btn btn-outline-secondary {{if eq .Filter ""}}active{{end}}" href="/jobs">Todos</a><a class="btn btn-outline-secondary {{if eq .Filter "pending"}}active{{end}}" href="/jobs?status=pending">Pendientes</a><a class="btn btn-outline-secondary {{if eq .Filter "processing"}}active{{end}}" href="/jobs?status=processing">En proceso</a><a class="btn btn-outline-secondary {{if eq .Filter "completed"}}active{{end}}" href="/jobs?status=completed">Terminados</a><a class="btn btn-outline-secondary {{if eq .Filter "failed"}}active{{end}}" href="/jobs?status=failed">Errores</a></div></div></div>
+<div class="card-body table-responsive"><table class="table table-bordered table-hover align-middle"><thead><tr><th>ID</th><th>WAV</th><th>Texto</th><th>Estado</th><th>Intentos</th><th>Worker</th><th>Error / Acción</th></tr></thead><tbody>
+{{range .Jobs}}<tr><td>{{.ID}}</td><td class="text-nowrap">{{.Filename}}</td><td style="min-width:250px">{{.Text}}</td><td>{{if eq .Status "pending"}}<span class="badge text-bg-warning">Pendiente</span>{{else if eq .Status "processing"}}<span class="badge text-bg-info">En proceso</span>{{else if eq .Status "completed"}}<span class="badge text-bg-success">Terminado</span>{{else}}<span class="badge text-bg-danger">Error</span>{{end}}</td><td>{{.Attempts}}</td><td>{{if .WorkerID}}{{.WorkerID}}{{else}}—{{end}}</td><td>{{if .Error}}<span class="text-danger">{{.Error}}</span>{{end}}{{if eq .Status "failed"}}<form method="post" action="/jobs/{{.ID}}/retry"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-sm btn-outline-primary mt-1">Reintentar</button></form>{{end}}</td></tr>
+{{else}}<tr><td colspan="7" class="text-center py-5 text-secondary">No hay registros en esta vista</td></tr>{{end}}
+</tbody></table></div>
+<div class="card-footer d-flex align-items-center justify-content-between"><span>Página {{.Page}}</span><div class="btn-group btn-group-sm">
+{{if gt .Page 1}}<a class="btn btn-outline-primary" href="/jobs?status={{.Filter}}&page={{.Prev}}">Anterior</a>{{end}}
+{{if .HasNext}}<a class="btn btn-outline-primary" href="/jobs?status={{.Filter}}&page={{.Next}}">Siguiente</a>{{end}}
+</div></div></div>
+{{end}}

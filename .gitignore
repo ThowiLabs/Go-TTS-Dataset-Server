@@ -1,0 +1,17 @@
+.env
+/data/
+/bin/
+*.log
+*.zip
+*.db
+*.db-shm
+*.db-wal
+
+dataset-server
+
+# Contexto local descifrado (no publicar)
+/contexto/
+/tareas/
+/contexto.md
+/.agents-*.tmp
+/.agents-restore-*/

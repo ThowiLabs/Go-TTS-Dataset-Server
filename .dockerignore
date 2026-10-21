@@ -1,0 +1,9 @@
+.git
+.env
+data/
+bin/
+contexto/
+tareas/
+*.zip
+*.db
+*.log
