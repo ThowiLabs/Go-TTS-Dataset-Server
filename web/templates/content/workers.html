@@ -1,13 +1,47 @@
 {{define "content"}}
-<div class="card"><div class="card-header"><h3 class="card-title">Clientes conectados anteriormente</h3></div><div class="card-body table-responsive"><table class="table table-striped"><thead><tr><th>Instancia</th><th>Última actividad</th><th>Reservados</th><th>Terminados</th></tr></thead><tbody>{{range .Workers}}<tr><td>{{.ID}}</td><td>{{date .LastSeen}}</td><td>{{.Claimed}}</td><td>{{.Completed}}</td></tr>{{else}}<tr><td colspan="4" class="text-center py-4">Sin instancias registradas</td></tr>{{end}}</tbody></table></div></div>
-<div class="card"><div class="card-header"><h3 class="card-title">Conexión de instancias</h3></div><div class="card-body"><p>Usa el encabezado <code>Authorization: Bearer &lt;WORKER_API_KEY&gt;</code> en todos los endpoints de workers. Cada instancia debe usar su propio <code>worker_id</code>.</p>
-<div class="table-responsive"><table class="table table-bordered"><thead><tr><th>Método</th><th>Endpoint</th><th>Función</th></tr></thead><tbody>
-<tr><td>GET</td><td><code>/api/v1/reference/meta</code></td><td>Hash y versión del audio</td></tr>
-<tr><td>GET</td><td><code>/api/v1/reference</code></td><td>Descargar WAV compartido</td></tr>
-<tr><td>POST</td><td><code>/api/v1/jobs/claim</code></td><td>Reservar siguiente pendiente</td></tr>
-<tr><td>POST</td><td><code>/api/v1/jobs/{id}/heartbeat</code></td><td>Renovar reserva vigente</td></tr>
-<tr><td>POST</td><td><code>/api/v1/jobs/{id}/complete</code></td><td>Subir WAV generado</td></tr>
-<tr><td>POST</td><td><code>/api/v1/jobs/{id}/fail</code></td><td>Informar error y reintentar</td></tr>
-<tr><td>GET</td><td><code>/api/v1/stats</code></td><td>Estadísticas generales</td></tr>
-</tbody></table></div><p class="text-body-secondary mb-0">Renueva la reserva antes de que expire. Cada respuesta de claim contiene el token de la reserva. Si no quedan trabajos, devuelve HTTP 204.</p></div></div>
+<div class="row g-3">
+<div class="col-xl-5">
+<div class="card">
+<div class="card-header"><h3 class="card-title">Registrar instancia</h3></div>
+<div class="card-body">
+<p class="text-body-secondary">Crea un cliente para cada GPU o proceso. La API le asignará automáticamente los trabajos pendientes.</p>
+<form method="post" action="/workers">
+<input type="hidden" name="_csrf" value="{{.CSRF}}">
+<div class="mb-3"><label class="form-label" for="client_id">Identificador</label><input class="form-control" id="client_id" name="client_id" required maxlength="61" pattern="[A-Za-z0-9][A-Za-z0-9_-]*" placeholder="gpu_t4_01"><div class="form-text">Único, sin espacios.</div></div>
+<div class="mb-3"><label class="form-label" for="description">Descripción (opcional)</label><input class="form-control" id="description" name="description" maxlength="150" placeholder="Kaggle Tesla T4 - instancia 1"></div>
+<button class="btn btn-primary" type="submit"><i class="bi bi-plus-circle me-1"></i> Registrar y generar token</button>
+</form>
+</div></div>
+</div>
+<div class="col-xl-7">
+{{if .IssuedToken}}
+<div class="alert alert-warning" role="status">
+<h5 class="alert-heading"><i class="bi bi-key me-1"></i> Token de {{.IssuedID}}</h5>
+<p>Guarda esta credencial en el cliente. <strong>Solo se muestra ahora</strong>; al salir de esta página tendrás que generar otra.</p>
+<div class="input-group"><input type="text" id="issued-token" readonly class="form-control font-monospace" value="{{.IssuedToken}}" aria-label="Nuevo token" onclick="this.select()"><button type="button" class="btn btn-outline-dark" onclick="navigator.clipboard.writeText(document.getElementById('issued-token').value).then(()=>{this.textContent='Copiado'})"><i class="bi bi-clipboard me-1"></i> Copiar</button></div>
+<div class="mt-2"><code>Authorization: Bearer &lt;TOKEN&gt;</code></div>
+</div>
+{{else}}
+<div class="card"><div class="card-body"><h5 class="card-title"><i class="bi bi-shield-lock me-1"></i> Acceso por instancia</h5>
+<p>El token se genera aleatoriamente y se conserva exclusivamente como hash SHA-256 en SQLite. Puedes renovarlo o revocarlo en cualquier momento.</p>
+<p class="mb-0"><a href="/api-docs" class="btn btn-outline-primary btn-sm">Leer documentación de la API</a></p></div></div>
+{{end}}
+</div>
+</div>
+<div class="card mt-3">
+<div class="card-header"><h3 class="card-title">Clientes registrados</h3></div>
+<div class="card-body table-responsive">
+<table class="table table-hover table-striped align-middle">
+<thead><tr><th>Instancia</th><th>Estado</th><th>Última actividad</th><th>Reservados</th><th>Completados</th><th>Acciones</th></tr></thead>
+<tbody>{{range .Clients}}
+<tr><td><strong>{{.ID}}</strong>{{if .Description}}<div class="text-body-secondary small">{{.Description}}</div>{{end}}<div class="small text-body-secondary">Creado {{date .CreatedAt}}</div></td>
+<td>{{if .RevokedAt}}<span class="badge text-bg-danger">Revocado</span>{{else}}<span class="badge text-bg-success">Habilitado</span>{{end}}</td>
+<td>{{date .LastSeen}}</td><td>{{.Claimed}}</td><td>{{.Completed}}</td>
+<td><div class="d-flex flex-wrap gap-1">
+<form method="post" action="/workers/{{.ID}}/rotate"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-outline-primary btn-sm" onclick="return confirm('¿Generar nuevo token para {{.ID}}? Se invalidará el anterior y cualquier reserva activa.')">Renovar token</button></form>
+{{if not .RevokedAt}}<form method="post" action="/workers/{{.ID}}/revoke"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('¿Revocar acceso de {{.ID}} y liberar sus trabajos reservados?')">Revocar</button></form>{{end}}
+</div></td></tr>
+{{else}}<tr><td colspan="6" class="py-5 text-center text-body-secondary">Todavía no has registrado clientes. Utiliza el formulario superior.</td></tr>{{end}}
+</tbody>
+</table></div></div>
 {{end}}

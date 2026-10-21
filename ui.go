@@ -21,6 +21,8 @@ type pageData struct {
 	Stats                               Stats
 	Jobs                                []Job
 	Workers                             []Worker
+	Clients                             []Client
+	IssuedToken, IssuedID               string
 	Reference                           Reference
 	HasReference                        bool
 	Page, Prev, Next                    int
@@ -82,7 +84,7 @@ func loadTemplates() (map[string]*PageTemplate, error) {
 		return nil, err
 	}
 	pages := map[string]*PageTemplate{}
-	for _, name := range []string{"dashboard", "jobs", "settings", "workers"} {
+	for _, name := range []string{"dashboard", "jobs", "settings", "workers", "api-docs"} {
 		contents, err := fs.ReadFile(webFS, "web/templates/content/"+name+".html")
 		if err != nil {
 			return nil, err
@@ -110,7 +112,9 @@ func loadTemplates() (map[string]*PageTemplate, error) {
 func (a *App) render(w http.ResponseWriter, r *http.Request, name string, d pageData) {
 	nonce, _ := a.session(r)
 	d.CSRF = nonce
-	d.Notice = r.URL.Query().Get("notice")
+	if d.Notice == "" {
+		d.Notice = r.URL.Query().Get("notice")
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := a.templates[name].ExecuteTemplate(w, func() string {
 		if name == "login" {
@@ -211,10 +215,5 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request) {
 	a.render(w, r, "settings", pageData{Title: "Configuración", Active: "settings", Reference: ref, HasReference: err == nil})
 }
 func (a *App) workersPage(w http.ResponseWriter, r *http.Request) {
-	ws, err := a.db.workers()
-	if err != nil {
-		http.Error(w, "error SQLite", 500)
-		return
-	}
-	a.render(w, r, "workers", pageData{Title: "Instancias", Active: "workers", Workers: ws})
+	a.clientsPage(w, r, "", "", "")
 }

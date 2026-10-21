@@ -81,6 +81,9 @@ func openStore(root string) (*Store, error) {
    filename TEXT NOT NULL,sha256 TEXT NOT NULL,path TEXT NOT NULL,updated_at INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS workers(id TEXT PRIMARY KEY,last_seen INTEGER NOT NULL,
    claimed INTEGER NOT NULL DEFAULT 0,completed INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE TABLE IF NOT EXISTS clients(id TEXT PRIMARY KEY, description TEXT NOT NULL DEFAULT '',
+   token_hash TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL,
+   last_seen INTEGER NOT NULL DEFAULT 0, revoked_at INTEGER NOT NULL DEFAULT 0)`,
 	}
 	for _, stmt := range statements {
 		if _, err := db.Exec(stmt); err != nil {
@@ -131,7 +134,8 @@ func (s *Store) claim(worker, token string, lease int) (Job, error) {
 	j := Job{}
 	err := s.DB.QueryRow(`UPDATE jobs SET status='processing',attempts=attempts+1,worker_id=?,lease_token=?,
  lease_until=?,error='',updated_at=? WHERE id=(SELECT id FROM jobs WHERE status='pending' ORDER BY id LIMIT 1)
- RETURNING id,filename,text,status,attempts,worker_id,lease_until`, worker, token, now+int64(lease), now).
+ AND EXISTS(SELECT 1 FROM clients WHERE id=? AND revoked_at=0)
+ RETURNING id,filename,text,status,attempts,worker_id,lease_until`, worker, token, now+int64(lease), now, worker).
 		Scan(&j.ID, &j.Filename, &j.Text, &j.Status, &j.Attempts, &j.WorkerID, &j.LeaseUntil)
 	if err != nil {
 		return Job{}, err
@@ -141,9 +145,10 @@ func (s *Store) claim(worker, token string, lease int) (Job, error) {
  ON CONFLICT(id) DO UPDATE SET last_seen=excluded.last_seen,claimed=claimed+1`, worker, now)
 	return j, err
 }
-func (s *Store) heartbeat(id int64, token string, lease int) (bool, error) {
+func (s *Store) heartbeat(id int64, token string, lease int, worker string) (bool, error) {
 	now := time.Now().Unix()
-	r, err := s.DB.Exec(`UPDATE jobs SET lease_until=?,updated_at=? WHERE id=? AND lease_token=? AND status='processing' AND lease_until>=?`, now+int64(lease), now, id, token, now)
+	r, err := s.DB.Exec(`UPDATE jobs SET lease_until=?,updated_at=? WHERE id=? AND lease_token=? AND worker_id=? AND status='processing' AND lease_until>=?
+ AND EXISTS(SELECT 1 FROM clients WHERE id=jobs.worker_id AND revoked_at=0)`, now+int64(lease), now, id, token, worker, now)
 	if err != nil {
 		return false, err
 	}
@@ -153,11 +158,12 @@ func (s *Store) heartbeat(id int64, token string, lease int) (bool, error) {
 	}
 	return n > 0, nil
 }
-func (s *Store) fail(id int64, token, message string, max int) (bool, error) {
+func (s *Store) fail(id int64, token, message, worker string, max int) (bool, error) {
 	now := time.Now().Unix()
 	r, err := s.DB.Exec(`UPDATE jobs SET status=CASE WHEN attempts>=? THEN 'failed' ELSE 'pending' END,
- error=?,worker_id='',lease_token='',lease_until=0,updated_at=? WHERE id=? AND lease_token=?
- AND status='processing' AND lease_until>=?`, max, message, now, id, token, now)
+ error=?,worker_id='',lease_token='',lease_until=0,updated_at=? WHERE id=? AND lease_token=? AND worker_id=?
+ AND status='processing' AND lease_until>=?
+ AND EXISTS(SELECT 1 FROM clients WHERE id=jobs.worker_id AND revoked_at=0)`, max, message, now, id, token, worker, now)
 	if err != nil {
 		return false, err
 	}
@@ -172,7 +178,7 @@ func (s *Store) retry(id int64) (bool, error) {
 	n, _ := r.RowsAffected()
 	return n > 0, nil
 }
-func (s *Store) complete(id int64, token, temp string) (bool, error) {
+func (s *Store) complete(id int64, token, temp, identity string) (bool, error) {
 	now := time.Now().Unix()
 	tx, err := s.DB.BeginTx(context.Background(), nil)
 	if err != nil {
@@ -180,7 +186,8 @@ func (s *Store) complete(id int64, token, temp string) (bool, error) {
 	}
 	defer tx.Rollback()
 	var filename, worker string
-	err = tx.QueryRow(`SELECT filename,worker_id FROM jobs WHERE id=? AND lease_token=? AND status='processing' AND lease_until>=?`, id, token, now).Scan(&filename, &worker)
+	err = tx.QueryRow(`SELECT filename,worker_id FROM jobs WHERE id=? AND lease_token=? AND worker_id=? AND status='processing' AND lease_until>=?
+ AND EXISTS(SELECT 1 FROM clients WHERE id=jobs.worker_id AND revoked_at=0)`, id, token, identity, now).Scan(&filename, &worker)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}

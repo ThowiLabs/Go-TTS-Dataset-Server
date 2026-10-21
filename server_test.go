@@ -17,7 +17,7 @@ import (
 
 func testApp(t *testing.T) *App {
 	t.Helper()
-	c := Config{DataDir: t.TempDir(), AdminUser: "admin", AdminPassword: "password12345", SessionSecret: strings.Repeat("s", 40), WorkerKey: strings.Repeat("k", 40), LeaseSeconds: 300, MaxAttempts: 3}
+	c := Config{DataDir: t.TempDir(), AdminUser: "admin", AdminPassword: "password12345", SessionSecret: strings.Repeat("s", 40), LeaseSeconds: 300, MaxAttempts: 3}
 	a, err := newApp(c)
 	if err != nil {
 		t.Fatal(err)
@@ -36,6 +36,10 @@ func TestAtomicClaimsAndRecovery(t *testing.T) {
 	a := testApp(t)
 	for i := 1; i <= 5; i++ {
 		insertJob(t, a, string(rune('0'+i))+".wav")
+		_, err := a.db.addClient("w"+string(rune('0'+i-1)), "GPU")
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	var wg sync.WaitGroup
 	ids := make(chan int64, 5)
@@ -76,11 +80,15 @@ func TestAtomicClaimsAndRecovery(t *testing.T) {
 	if err != nil || n != 1 {
 		t.Fatalf("recovered=%d err=%v", n, err)
 	}
+	_, err = a.db.addClient("retry", "GPU de reemplazo")
+	if err != nil {
+		t.Fatal(err)
+	}
 	j, err := a.db.claim("retry", randomToken(24), 300)
 	if err != nil || j.ID != 1 || j.Attempts != 2 {
 		t.Fatalf("retry job=%+v err=%v", j, err)
 	}
-	if ok, _ := a.db.heartbeat(j.ID, "bad_token", 300); ok {
+	if ok, _ := a.db.heartbeat(j.ID, "bad_token", 300, "retry"); ok {
 		t.Fatal("heartbeat ajeno aceptado")
 	}
 }
@@ -153,10 +161,14 @@ func TestHTTPDatasetWorkflow(t *testing.T) {
 	if rec.Code != 303 {
 		t.Fatalf("reference upload %d: %s", rec.Code, rec.Body.String())
 	}
+	workerToken, err := a.db.addClient("gpu_t4_1", "Worker de prueba")
+	if err != nil {
+		t.Fatal(err)
+	}
 	claim := func() *httptest.ResponseRecorder {
 		body := strings.NewReader(`{"worker_id":"gpu_t4_1"}`)
 		req := httptest.NewRequest("POST", "/api/v1/jobs/claim", body)
-		req.Header.Set("Authorization", "Bearer "+a.cfg.WorkerKey)
+		req.Header.Set("Authorization", "Bearer "+workerToken)
 		out := httptest.NewRecorder()
 		h.ServeHTTP(out, req)
 		return out
@@ -176,7 +188,7 @@ func TestHTTPDatasetWorkflow(t *testing.T) {
 	}
 	// No lease token = rejection.
 	req := httptest.NewRequest("POST", "/api/v1/jobs/1/complete", nil)
-	req.Header.Set("Authorization", "Bearer "+a.cfg.WorkerKey)
+	req.Header.Set("Authorization", "Bearer "+workerToken)
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code == 200 {
@@ -189,7 +201,7 @@ func TestHTTPDatasetWorkflow(t *testing.T) {
 	part.Write(wav)
 	m.Close()
 	req = httptest.NewRequest("POST", "/api/v1/jobs/1/complete", body)
-	req.Header.Set("Authorization", "Bearer "+a.cfg.WorkerKey)
+	req.Header.Set("Authorization", "Bearer "+workerToken)
 	req.Header.Set("Content-Type", m.FormDataContentType())
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, req)

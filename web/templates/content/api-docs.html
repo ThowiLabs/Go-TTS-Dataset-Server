@@ -1,0 +1,90 @@
+{{define "content"}}
+<div class="row g-3">
+<div class="col-lg-8">
+<div class="card"><div class="card-header"><h3 class="card-title">Primeros pasos</h3></div><div class="card-body">
+<p>Desde <a href="/workers">Clientes</a> registra una instancia (por ejemplo, <code>gpu_t4_01</code>) y copia su token de acceso. Puedes usar hasta cinco instancias o más, cada una con su propio token. Usa siempre HTTPS fuera de la red local.</p>
+<p>Configura estas variables en cada cliente:</p>
+<pre class="bg-body-secondary p-3 rounded overflow-auto"><code>BASE="https://TU-SERVIDOR"
+TOKEN="PEGA_TU_TOKEN_GENERADO"</code></pre>
+<p>En las peticiones de la API se usa <code>Authorization: Bearer $TOKEN</code>. Esta credencial identifica al worker sin requerir contraseña del administrador.</p>
+</div></div>
+<div class="card"><div class="card-header"><h3 class="card-title">1. Comprobar acceso y voz de referencia</h3></div><div class="card-body">
+<p>Consulta la identidad del cliente y la versión SHA-256 de la referencia. Si no está cargado el audio, este último endpoint devuelve HTTP 404.</p>
+<pre class="bg-body-secondary p-3 rounded overflow-auto"><code>curl -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/client/me"
+
+curl -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/reference/meta"
+
+curl -f -H "Authorization: Bearer $TOKEN" \
+  "$BASE/api/v1/reference" -o referencia.wav</code></pre>
+<p>La respuesta de <code>reference/meta</code> contiene <code>sha256</code>, <code>filename</code>, <code>updated_at</code> y <code>download_url</code>. Comprueba el hash para evitar volver a descargar un audio sin cambios.</p>
+</div></div>
+<div class="card"><div class="card-header"><h3 class="card-title">2. Reservar un trabajo pendiente</h3></div><div class="card-body">
+<pre class="bg-body-secondary p-3 rounded overflow-auto"><code>curl -i -X POST "$BASE/api/v1/jobs/claim" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'</code></pre>
+<p>La API identifica al cliente por su token y devuelve el primer trabajo pendiente. Respuesta de ejemplo:</p>
+<pre class="bg-body-secondary p-3 rounded overflow-auto"><code>{
+  "job": {
+    "id": 5,
+    "filename": "5.wav",
+    "text": "Esto puede abarcar desde simples tareas...",
+    "status": "processing",
+    "attempts": 1,
+    "worker_id": "gpu_t4_01",
+    "lease_token": "TOKEN_DE_RESERVA",
+    "lease_until": 1800000000
+  },
+  "reference_url": "/api/v1/reference",
+  "reference_sha256": "HASH_SHA256",
+  "lease_seconds": 1800
+}</code></pre>
+<p><strong>HTTP 204:</strong> no quedan trabajos pendientes. <strong>HTTP 409:</strong> falta cargar la voz de referencia. El <code>lease_token</code> identifica solamente la reserva del trabajo: no es el mismo token Bearer.</p>
+</div></div>
+<div class="card"><div class="card-header"><h3 class="card-title">3. Renovar la reserva</h3></div><div class="card-body">
+<p>Mientras el TTS sintetiza audio, envía heartbeats antes de que venza el tiempo indicado en <code>lease_seconds</code>.</p>
+<pre class="bg-body-secondary p-3 rounded overflow-auto"><code>JOB_ID=5
+LEASE_TOKEN="PEGA_LEASE_TOKEN"
+
+curl -X POST "$BASE/api/v1/jobs/$JOB_ID/heartbeat" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"lease_token\":\"$LEASE_TOKEN\"}"</code></pre>
+<p>Si vence, el servidor recupera el trabajo automáticamente. Un token de reserva vencido o ajeno produce HTTP 409.</p>
+</div></div>
+<div class="card"><div class="card-header"><h3 class="card-title">4. Subir el WAV generado</h3></div><div class="card-body">
+<pre class="bg-body-secondary p-3 rounded overflow-auto"><code>curl -X POST "$BASE/api/v1/jobs/$JOB_ID/complete" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "lease_token=$LEASE_TOKEN" \
+  -F "audio=@salida.wav;type=audio/wav"</code></pre>
+<p>Si termina correctamente, devuelve <code>{"ok":true}</code>. El servidor almacena el WAV y marca el trabajo como terminado. Si falla la síntesis:</p>
+<pre class="bg-body-secondary p-3 rounded overflow-auto"><code>curl -X POST "$BASE/api/v1/jobs/$JOB_ID/fail" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"lease_token\":\"$LEASE_TOKEN\",\"error\":\"Fallo de síntesis\"}"</code></pre>
+<p>Un error reencola el trabajo si quedan intentos; si no, lo marca como error permanente para revisión.</p>
+</div></div>
+<div class="card"><div class="card-header"><h3 class="card-title">5. Consultar el progreso</h3></div><div class="card-body">
+<pre class="bg-body-secondary p-3 rounded overflow-auto"><code>curl -H "Authorization: Bearer $TOKEN" \
+  "$BASE/api/v1/stats"</code></pre><p>Devuelve <code>total</code>, <code>pending</code>, <code>processing</code>, <code>completed</code> y <code>failed</code>.</p>
+</div></div>
+</div>
+<div class="col-lg-4">
+<div class="card"><div class="card-header"><h3 class="card-title">Referencia rápida</h3></div><div class="card-body table-responsive"><table class="table table-sm align-middle">
+<thead><tr><th>Método</th><th>Ruta</th></tr></thead>
+<tbody><tr><td>GET</td><td><code>/api/v1/client/me</code></td></tr>
+<tr><td>GET</td><td><code>/api/v1/reference/meta</code></td></tr>
+<tr><td>GET</td><td><code>/api/v1/reference</code></td></tr>
+<tr><td>POST</td><td><code>/api/v1/jobs/claim</code></td></tr>
+<tr><td>POST</td><td><code>/api/v1/jobs/{id}/heartbeat</code></td></tr>
+<tr><td>POST</td><td><code>/api/v1/jobs/{id}/complete</code></td></tr>
+<tr><td>POST</td><td><code>/api/v1/jobs/{id}/fail</code></td></tr>
+<tr><td>GET</td><td><code>/api/v1/stats</code></td></tr></tbody></table>
+</div></div>
+<div class="card"><div class="card-header"><h3 class="card-title">Estados HTTP</h3></div><div class="card-body"><dl>
+<dt>200</dt><dd>Operación exitosa</dd><dt>204</dt><dd>Cola sin pendientes</dd><dt>400</dt><dd>Datos inválidos</dd><dt>401</dt><dd>Token inválido o revocado</dd><dt>403</dt><dd>ID de cliente distinto al del token</dd><dt>404</dt><dd>Sin referencia de voz o recurso inexistente</dd><dt>409</dt><dd>Reserva vencida, cliente no autorizado o falta referencia</dd>
+</dl></div></div>
+<div class="card"><div class="card-body"><h5>Exportación del dataset</h5><p>El administrador puede descargar desde <a href="/export">Descargar ZIP</a> los WAV terminados y su CSV asociado.</p>
+<p>Los tokens de cliente solo permiten usar la API de procesamiento; no dan acceso a configuración, exportaciones ni gestión de usuarios.</p></div></div>
+</div></div>
+{{end}}

@@ -28,8 +28,8 @@ import (
 var webFS embed.FS
 
 type Config struct {
-	Listen, DataDir, AdminUser, AdminPassword, WorkerKey, SessionSecret string
-	LeaseSeconds, MaxAttempts                                           int
+	Listen, DataDir, AdminUser, AdminPassword, SessionSecret string
+	LeaseSeconds, MaxAttempts                                int
 }
 type App struct {
 	db           *Store
@@ -93,9 +93,9 @@ func config() (Config, error) {
 	if m < 1 {
 		m = 3
 	}
-	c := Config{Listen: get("LISTEN_ADDR", ":8080"), DataDir: get("DATA_DIR", "./data"), AdminUser: get("ADMIN_USER", "admin"), AdminPassword: os.Getenv("ADMIN_PASSWORD"), WorkerKey: os.Getenv("WORKER_API_KEY"), SessionSecret: os.Getenv("SESSION_SECRET"), LeaseSeconds: n, MaxAttempts: m}
-	if len(c.AdminPassword) < 10 || len(c.WorkerKey) < 24 || len(c.SessionSecret) < 32 {
-		return c, errors.New("configura ADMIN_PASSWORD (>=10 caracteres), WORKER_API_KEY (>=24) y SESSION_SECRET (>=32) en .env")
+	c := Config{Listen: get("LISTEN_ADDR", ":8080"), DataDir: get("DATA_DIR", "./data"), AdminUser: get("ADMIN_USER", "admin"), AdminPassword: os.Getenv("ADMIN_PASSWORD"), SessionSecret: os.Getenv("SESSION_SECRET"), LeaseSeconds: n, MaxAttempts: m}
+	if len(c.AdminPassword) < 10 || len(c.SessionSecret) < 32 {
+		return c, errors.New("configura ADMIN_PASSWORD (>=10 caracteres) y SESSION_SECRET (>=32) en .env")
 	}
 	return c, nil
 }
@@ -191,12 +191,12 @@ func (a *App) session(r *http.Request) (string, bool) {
 	return split[1], true
 }
 func (a *App) authenticated(r *http.Request) bool { _, ok := a.session(r); return ok }
-func (a *App) workerAuth(r *http.Request) bool {
-	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if len(token) != len(a.cfg.WorkerKey) {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(token), []byte(a.cfg.WorkerKey)) == 1
+
+type clientContextKey struct{}
+
+func clientIDFromContext(ctx context.Context) string {
+	id, _ := ctx.Value(clientContextKey{}).(string)
+	return id
 }
 func (a *App) needLogin(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -217,11 +217,12 @@ func (a *App) needLogin(h http.HandlerFunc) http.HandlerFunc {
 }
 func (a *App) needWorker(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !a.workerAuth(r) {
-			writeErr(w, http.StatusUnauthorized, "token de worker inválido")
+		id, ok := a.authorizedClient(r)
+		if !ok {
+			writeErr(w, http.StatusUnauthorized, "Token de cliente inválido o revocado")
 			return
 		}
-		h(w, r)
+		h(w, r.WithContext(context.WithValue(r.Context(), clientContextKey{}, id)))
 	}
 }
 func (a *App) validateCSRF(r *http.Request) bool {
@@ -255,6 +256,10 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("GET /jobs", a.needLogin(a.jobsPage))
 	m.HandleFunc("GET /settings", a.needLogin(a.settingsPage))
 	m.HandleFunc("GET /workers", a.needLogin(a.workersPage))
+	m.HandleFunc("POST /workers", a.needLogin(a.registerClient))
+	m.HandleFunc("POST /workers/{id}/rotate", a.needLogin(a.rotateClient))
+	m.HandleFunc("POST /workers/{id}/revoke", a.needLogin(a.revokeClient))
+	m.HandleFunc("GET /api-docs", a.needLogin(a.apiDocsPage))
 	m.HandleFunc("POST /import", a.needLogin(a.importCSV))
 	m.HandleFunc("POST /reference", a.needLogin(a.uploadReference))
 	m.HandleFunc("POST /jobs/{id}/retry", a.needLogin(a.retryJob))
@@ -263,6 +268,7 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("GET /api/v1/reference", a.needWorker(a.referenceDownload))
 	m.HandleFunc("GET /api/v1/reference/meta", a.needWorker(a.referenceMetadata))
 	m.HandleFunc("GET /api/v1/stats", a.needWorker(a.statsAPI))
+	m.HandleFunc("GET /api/v1/client/me", a.needWorker(a.currentClientAPI))
 	m.HandleFunc("POST /api/v1/jobs/claim", a.needWorker(a.claimJob))
 	m.HandleFunc("POST /api/v1/jobs/{id}/heartbeat", a.needWorker(a.heartbeatJob))
 	m.HandleFunc("POST /api/v1/jobs/{id}/complete", a.needWorker(a.completeJob))

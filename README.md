@@ -45,18 +45,18 @@ data/                           SQLite, WAVs, referencia y staging (ignorado por
 
 ## Ejemplo de API para cinco workers
 
-Usa una **clave de worker** independiente de las credenciales del administrador:
+En el panel entra a **Clientes**, registra una instancia (por ejemplo `gpu_1`) y **copia el token que aparece una sola vez**. No existe clave global compartida: cada instancia tiene una credencial única, almacenada como hash en SQLite.
 
 ```bash
 export BASE="http://localhost:8080"
-export WORKER_API_KEY="<valor-de-WORKER_API_KEY-del-servidor>"
-curl -fsS -H "Authorization: Bearer $WORKER_API_KEY" "$BASE/api/v1/reference/meta"
-curl -fsS -H "Authorization: Bearer $WORKER_API_KEY" -o reference.wav "$BASE/api/v1/reference"
+export TOKEN="<token-individual-generado-en-Clientes>"
+curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/reference/meta"
+curl -fsS -H "Authorization: Bearer $TOKEN" -o reference.wav "$BASE/api/v1/reference"
 
 curl -i -X POST "$BASE/api/v1/jobs/claim" \
-  -H "Authorization: Bearer $WORKER_API_KEY" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"worker_id":"gpu_1"}'
+  -d '{}'
 ```
 
 Una reserva devuelve HTTP 200 con estructura:
@@ -80,7 +80,7 @@ Mientras procesa, el worker debe enviar un heartbeat antes de que venza la reser
 
 ```bash
 curl -X POST "$BASE/api/v1/jobs/1/heartbeat" \
-  -H "Authorization: Bearer $WORKER_API_KEY" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"lease_token":"TOKEN_ALEATORIO"}'
 ```
 
@@ -88,7 +88,7 @@ Al terminar, sube el audio resultante como multipart:
 
 ```bash
 curl -X POST "$BASE/api/v1/jobs/1/complete" \
-  -H "Authorization: Bearer $WORKER_API_KEY" \
+  -H "Authorization: Bearer $TOKEN" \
   -F "lease_token=TOKEN_ALEATORIO" -F "audio=@output.wav;type=audio/wav"
 ```
 
@@ -96,19 +96,20 @@ Ante error reportado por cliente:
 
 ```bash
 curl -X POST "$BASE/api/v1/jobs/1/fail" \
- -H "Authorization: Bearer $WORKER_API_KEY" -H "Content-Type: application/json" \
+ -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
  -d '{"lease_token":"TOKEN_ALEATORIO","error":"Error de síntesis"}'
 ```
 
 Si la reserva ya terminó, expiró o pertenece a otro cliente, los endpoints de heartbeat/completado/fallo devuelven **409**. No deben reintentar esa subida: deben pedir otra tarea.
 
-También está disponible `GET /api/v1/stats`. La interfaz web requiere login y los formularios incluyen protección CSRF. Los workers usan únicamente la clave Bearer.
+También están disponibles `GET /api/v1/client/me` y `GET /api/v1/stats`. La interfaz web requiere login y los formularios incluyen protección CSRF. Los workers usan únicamente la clave Bearer.
 
 ## Panel de administración
 
 - **Resumen**: totales, pendientes, en proceso, terminados, errores y barra de progreso.
 - **Trabajos**: lista paginada con filtros y reintento manual de errores.
-- **Instancias**: última actividad registrada y trabajos asignados/terminados por cliente.
+- **Clientes**: dar de alta una GPU/cliente y recibir su token individual, renovar o revocar credenciales. Historial de actividad y trabajo.
+- **Documentación API**: guía interactiva en el panel con endpoints, curl, estados y respuestas.
 - **Configuración**: subir CSV y WAV de referencia (con reproductor).
 - **Descargar ZIP**: genera un ZIP al momento con WAVs completados y CSV.
 
@@ -122,7 +123,7 @@ go vet ./...
 go test -race ./...
 ```
 
-Las pruebas cubren cinco reservas simultáneas, recuperación, rechazo de tokens incorrectos, inicio de sesión, importación CSV, subida de referencia, carga del WAV resultante y estructura del ZIP.
+Las pruebas cubren cinco reservas simultáneas, recuperación, registro de clientes, validación de identidad, revocación y renovación de tokens, CSRF, inicio de sesión, importación CSV, subida de referencia, carga del WAV resultante y estructura del ZIP.
 
 ## Avisos
 
@@ -139,3 +140,11 @@ AdminLTE 4.10.1 se descargó del [release oficial](https://github.com/ColorlibHQ
 ## Contexto de desarrollo
 
 La documentación de continuidad se almacena cifrada en `agents.ctx`. Se abre con la herramienta de contexto de Cl antes de continuar con el proyecto; `contexto/` y `tareas/` están excluidas del control de versiones en texto plano.
+
+## Gestión de credenciales de clientes
+
+Accede a `/workers` para crear un cliente por instancia y obtener el token `dts_...` de 256 bits. El token completo **solo se muestra una vez**. Si se pierde, usa «Renovar token». «Revocar» desactiva el acceso. Ambas acciones liberan inmediatamente sus trabajos en proceso para reintento y no afectan a los archivos terminados. Las claves anteriores dejan de tener validez.
+
+Los clientes se identifican exclusivamente por su token, así que `POST /api/v1/jobs/claim` acepta `{}` y no necesita `worker_id`; un ID ajeno produce HTTP 403. El cliente puede consultar su identidad con `GET /api/v1/client/me`. Las rutas administrativas están protegidas por sesión y CSRF; una clave de cliente no las habilita.
+
+**Migración:** la antigua variable `WORKER_API_KEY` fue eliminada porque una sola clave compartida impediría revocación selectiva. Las instalaciones existentes deben registrar sus instancias en el panel y actualizar la variable `TOKEN` de cada cliente. La base SQLite previa se conserva y la tabla `clients` se crea automáticamente al iniciar. Consulta `/api-docs` para los ejemplos completos.

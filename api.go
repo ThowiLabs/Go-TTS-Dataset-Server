@@ -94,10 +94,16 @@ func (a *App) claimJob(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		WorkerID string `json:"worker_id"`
 	}
-	if err := readJSON(r, &req); err != nil || !workerName.MatchString(req.WorkerID) {
-		writeErr(w, 400, "worker_id inválido")
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, 400, "JSON inválido")
 		return
 	}
+	clientID := clientIDFromContext(r.Context())
+	if req.WorkerID != "" && req.WorkerID != clientID {
+		writeErr(w, 403, "worker_id no corresponde al token registrado")
+		return
+	}
+	req.WorkerID = clientID
 	// Recover overdue leases before claiming, so a restarted server has no stale backlog.
 	if _, err := a.db.requeueExpired(a.cfg.MaxAttempts); err != nil {
 		writeErr(w, 500, "error de recuperación")
@@ -140,7 +146,7 @@ func (a *App) heartbeatJob(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "lease_token inválido")
 		return
 	}
-	ok, err := a.db.heartbeat(id, req.LeaseToken, a.cfg.LeaseSeconds)
+	ok, err := a.db.heartbeat(id, req.LeaseToken, a.cfg.LeaseSeconds, clientIDFromContext(r.Context()))
 	if err != nil {
 		writeErr(w, 500, "error al renovar")
 		return
@@ -171,7 +177,7 @@ func (a *App) failJob(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(req.Error) == "" {
 		req.Error = "Error informado por el worker"
 	}
-	ok, err := a.db.fail(id, req.LeaseToken, req.Error, a.cfg.MaxAttempts)
+	ok, err := a.db.fail(id, req.LeaseToken, req.Error, clientIDFromContext(r.Context()), a.cfg.MaxAttempts)
 	if err != nil {
 		writeErr(w, 500, "error al informar fallo")
 		return
@@ -239,7 +245,7 @@ func (a *App) completeJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer os.Remove(tmp)
-	ok, err := a.db.complete(id, token, tmp)
+	ok, err := a.db.complete(id, token, tmp, clientIDFromContext(r.Context()))
 	if err != nil {
 		log.Printf("complete: %v", err)
 		writeErr(w, 500, "no se pudo guardar el audio")
