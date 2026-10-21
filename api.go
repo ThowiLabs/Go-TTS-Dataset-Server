@@ -19,7 +19,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 var wavName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}\.wav$`)
@@ -300,89 +299,48 @@ func (a *App) exportZIP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Include every original CSV that was successfully imported, unmodified.
+	sources, err := a.db.DB.Query("SELECT id, original_filename, path FROM import_sources ORDER BY imported_at,id")
+	if err != nil {
+		log.Printf("ZIP sources query: %v", err)
+		return
+	}
+	defer sources.Close()
+	for sources.Next() {
+		var id, name, path string
+		if err := sources.Scan(&id, &name, &path); err != nil {
+			return
+		}
+		if !importIDPattern.MatchString(id) {
+			return
+		}
+		if filepath.Dir(path) != filepath.Join(a.cfg.DataDir, "sources") {
+			log.Printf("ZIP source path rejected")
+			return
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			log.Printf("ZIP source missing: %v", err)
+			return
+		}
+		entry, err := z.Create("sources/" + id + "-" + filepath.Base(name))
+		if err != nil {
+			f.Close()
+			return
+		}
+		_, err = io.Copy(entry, f)
+		f.Close()
+		if err != nil {
+			log.Printf("ZIP source copy: %v", err)
+			return
+		}
+	}
+	if err := sources.Err(); err != nil {
+		log.Printf("ZIP source rows: %v", err)
+	}
 }
 func (a *App) importCSV(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
-	if err := r.ParseMultipartForm(4 << 20); err != nil {
-		http.Error(w, "CSV demasiado grande", 400)
-		return
-	}
-	if r.MultipartForm != nil {
-		defer r.MultipartForm.RemoveAll()
-	}
-	f, _, err := r.FormFile("csv")
-	if err != nil {
-		http.Error(w, "falta CSV", 400)
-		return
-	}
-	defer f.Close()
-	raw, err := io.ReadAll(io.LimitReader(f, 30<<20))
-	if err != nil || !utf8.Valid(raw) {
-		http.Error(w, "CSV inválido o grande", 400)
-		return
-	}
-	raw = []byte(strings.TrimPrefix(string(raw), "\ufeff"))
-	delimiter := '|'
-	line := strings.SplitN(string(raw), "\n", 2)[0]
-	if !strings.ContainsRune(line, '|') && strings.ContainsRune(line, ',') {
-		delimiter = ','
-	}
-	reader := csv.NewReader(strings.NewReader(string(raw)))
-	reader.Comma = delimiter
-	reader.FieldsPerRecord = 2
-	reader.TrimLeadingSpace = true
-	tx, err := a.db.DB.Begin()
-	if err != nil {
-		http.Error(w, "error SQLite", 500)
-		return
-	}
-	defer tx.Rollback()
-	stmt, err := tx.Prepare(`INSERT INTO jobs(filename,text,status,created_at,updated_at)VALUES(?,?,'pending',?,?) ON CONFLICT(filename) DO NOTHING`)
-	if err != nil {
-		http.Error(w, "error SQLite", 500)
-		return
-	}
-	defer stmt.Close()
-	added, skipped := 0, 0
-	now := time.Now().Unix()
-	for {
-		rec, err := reader.Read()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			http.Error(w, fmt.Sprintf("CSV inválido en línea %d: %v", reader.InputOffset(), err), 400)
-			return
-		}
-		name, text := strings.TrimSpace(rec[0]), strings.TrimSpace(rec[1])
-		if strings.EqualFold(name, "filename") || strings.EqualFold(name, "archivo") {
-			continue
-		}
-		if !validWavName(name) || text == "" || len(text) > 10000 {
-			http.Error(w, "Nombre WAV o texto inválido: "+name, 400)
-			return
-		}
-		res, err := stmt.Exec(name, text, now, now)
-		if err != nil {
-			http.Error(w, "error insertando registro", 500)
-			return
-		}
-		n, _ := res.RowsAffected()
-		if n == 0 {
-			skipped++
-		} else {
-			added++
-		}
-		if added+skipped > 100000 {
-			http.Error(w, "máximo 100000 registros por importación", 400)
-			return
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		http.Error(w, "error confirmando importación", 500)
-		return
-	}
-	http.Redirect(w, r, fmt.Sprintf("/settings?notice=importados+%d,+duplicados+%d", added, skipped), http.StatusSeeOther)
+	a.previewCSVUpload(w, r)
 }
 func (a *App) uploadReference(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 26<<20)

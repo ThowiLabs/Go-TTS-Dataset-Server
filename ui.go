@@ -25,6 +25,7 @@ type pageData struct {
 	IssuedToken, IssuedID               string
 	Reference                           Reference
 	HasReference                        bool
+	ImportPreview                       *importPreview
 	Page, Prev, Next                    int
 	HasNext                             bool
 }
@@ -212,7 +213,15 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "error SQLite", 500)
 		return
 	}
-	a.render(w, r, "settings", pageData{Title: "Configuración", Active: "settings", Reference: ref, HasReference: err == nil})
+	var preview *importPreview
+	if id := r.URL.Query().Get("preview"); id != "" {
+		preview, err = a.loadImportPreview(r, id)
+		if err != nil {
+			http.Error(w, "Vista previa caducada o inválida: vuelve a subir el CSV", http.StatusGone)
+			return
+		}
+	}
+	a.render(w, r, "settings", pageData{Title: "Configuración", Active: "settings", Reference: ref, HasReference: err == nil, ImportPreview: preview})
 }
 func (a *App) workersPage(w http.ResponseWriter, r *http.Request) {
 	a.clientsPage(w, r, "", "", "")

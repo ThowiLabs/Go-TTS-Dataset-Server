@@ -148,3 +148,11 @@ Accede a `/workers` para crear un cliente por instancia y obtener el token `dts_
 Los clientes se identifican exclusivamente por su token, así que `POST /api/v1/jobs/claim` acepta `{}` y no necesita `worker_id`; un ID ajeno produce HTTP 403. El cliente puede consultar su identidad con `GET /api/v1/client/me`. Las rutas administrativas están protegidas por sesión y CSRF; una clave de cliente no las habilita.
 
 **Migración:** la antigua variable `WORKER_API_KEY` fue eliminada porque una sola clave compartida impediría revocación selectiva. Las instalaciones existentes deben registrar sus instancias en el panel y actualizar la variable `TOKEN` de cada cliente. La base SQLite previa se conserva y la tabla `clients` se crea automáticamente al iniciar. Consulta `/api-docs` para los ejemplos completos.
+
+### Importación CSV con revisión previa
+
+En **Configuración → Importar dataset CSV**, el panel analiza el archivo antes de modificar SQLite. El lector admite el separador `|` o coma, UTF-8 (con o sin BOM), comillas correctamente escapadas y comillas literales dentro del texto. Si el CSV necesita recuperación, se muestra una advertencia con las líneas detectadas; un registro imposible de corregir (por ejemplo, sin nombre WAV o sin texto) se rechaza con su línea.
+
+En la vista previa también se notifican nombres de WAV repetidos dentro del CSV, nombres que ya existen en la base de datos y textos repetidos aunque tengan otro nombre de WAV. Los nombres duplicados solo se omiten tras confirmar expresamente; **los registros ya existentes nunca se eliminan ni sobrescriben**. Para frases duplicadas, el administrador decide si omitirlas o conservarlas. La vista previa caduca a los 30 minutos y está vinculada a la sesión que la creó.
+
+La importación conserva los **bytes originales** de cada CSV confirmado en `DATA_DIR/sources/` y registra su SHA-256, nombre, fecha, cantidad importada y omitida en SQLite. Al descargar `/export`, el ZIP incluye `metadata.csv`, los WAV completados y los originales importados bajo `sources/<id>-<nombre>.csv`. Los CSV importados antes de esta versión no pueden recuperarse del historial de SQLite, por lo que no aparecerán como originales en la descarga retroactiva.

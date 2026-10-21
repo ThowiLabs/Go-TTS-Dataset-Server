@@ -261,6 +261,7 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /workers/{id}/revoke", a.needLogin(a.revokeClient))
 	m.HandleFunc("GET /api-docs", a.needLogin(a.apiDocsPage))
 	m.HandleFunc("POST /import", a.needLogin(a.importCSV))
+	m.HandleFunc("POST /import/confirm", a.needLogin(a.confirmCSVImport))
 	m.HandleFunc("POST /reference", a.needLogin(a.uploadReference))
 	m.HandleFunc("POST /jobs/{id}/retry", a.needLogin(a.retryJob))
 	m.HandleFunc("GET /export", a.needLogin(a.exportZIP))

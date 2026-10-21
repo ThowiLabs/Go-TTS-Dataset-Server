@@ -53,7 +53,7 @@ func openStore(root string) (*Store, error) {
 	if err := mustDir(root); err != nil {
 		return nil, err
 	}
-	for _, p := range []string{"wavs", "reference", "tmp"} {
+	for _, p := range []string{"wavs", "reference", "tmp", "sources"} {
 		if err := mustDir(filepath.Join(root, p)); err != nil {
 			return nil, err
 		}
@@ -79,6 +79,9 @@ func openStore(root string) (*Store, error) {
 		"CREATE INDEX IF NOT EXISTS idx_jobs_leases ON jobs(status,lease_until)",
 		`CREATE TABLE IF NOT EXISTS reference(id INTEGER PRIMARY KEY CHECK(id=1),
    filename TEXT NOT NULL,sha256 TEXT NOT NULL,path TEXT NOT NULL,updated_at INTEGER NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS import_sources (
+    id TEXT PRIMARY KEY, original_filename TEXT NOT NULL, path TEXT NOT NULL, sha256 TEXT NOT NULL,
+    imported_at INTEGER NOT NULL, imported_count INTEGER NOT NULL, skipped_count INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS workers(id TEXT PRIMARY KEY,last_seen INTEGER NOT NULL,
    claimed INTEGER NOT NULL DEFAULT 0,completed INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE TABLE IF NOT EXISTS clients(id TEXT PRIMARY KEY, description TEXT NOT NULL DEFAULT '',

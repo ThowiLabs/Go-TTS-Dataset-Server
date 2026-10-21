@@ -149,6 +149,23 @@ func TestHTTPDatasetWorkflow(t *testing.T) {
 	if rec.Code != 303 {
 		t.Fatalf("import %d: %s", rec.Code, rec.Body.String())
 	}
+	previewURL, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	previewID := previewURL.Query().Get("preview")
+	if previewID == "" {
+		t.Fatal("falta token de revisión CSV")
+	}
+	confirm := url.Values{"_csrf": {csrf}, "preview_id": {previewID}, "duplicate_texts": {"keep"}}.Encode()
+	r = httptest.NewRequest("POST", "/import/confirm", strings.NewReader(confirm))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, r)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("confirm CSV %d: %s", rec.Code, rec.Body.String())
+	}
 	stats, _ := a.db.stats()
 	if stats.Pending != 2 {
 		t.Fatalf("stats %+v", stats)

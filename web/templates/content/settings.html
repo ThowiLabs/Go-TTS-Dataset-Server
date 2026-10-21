@@ -1,7 +1,36 @@
 {{define "content"}}
 <div class="row g-3"><div class="col-lg-6"><div class="card"><div class="card-header"><h3 class="card-title">Importar dataset CSV</h3></div><div class="card-body">
-<p>Importa registros en formato <code>1.wav|Texto de ejemplo</code>. Se aceptan CSV separados por <code>|</code> o por coma y se omiten nombres duplicados.</p>
-<form method="post" action="/import" enctype="multipart/form-data"><input type="hidden" name="_csrf" value="{{.CSRF}}"><label for="csv" class="form-label">Archivo de metadatos</label><input id="csv" class="form-control mb-3" type="file" name="csv" accept=".csv,text/csv,.txt" required><button type="submit" class="btn btn-primary"><i class="bi bi-upload me-1"></i> Importar CSV</button></form>
+<p>Sube un CSV separado por <code>|</code> o coma. El panel revisa errores de comillas y duplicados antes de importar. No se borra ningún trabajo existente.</p>
+{{if .ImportPreview}}
+<div class="alert alert-info" role="status">
+ <h4 class="alert-heading fs-6">Revisión previa del CSV</h4>
+ <p class="mb-1"><strong>{{.ImportPreview.OriginalName}}</strong> · {{.ImportPreview.Summary}}</p>
+ <p class="mb-0">El archivo original se conservará y se incluirá en el ZIP descargable.</p>
+</div>
+{{if .ImportPreview.Warnings}}
+<div class="alert alert-warning" role="alert"><strong>Correcciones detectadas</strong><ul class="mb-0 mt-2">{{range .ImportPreview.Warnings}}<li>{{.}}</li>{{end}}</ul></div>
+{{end}}
+{{if .ImportPreview.Samples}}
+<details class="mb-3"><summary>Ver ejemplos de registros repetidos</summary>
+<ul class="small mt-2">{{range .ImportPreview.Samples}}<li>{{.}}</li>{{end}}</ul>
+</details>
+{{end}}
+<form method="post" action="/import/confirm" class="border rounded p-3 mb-3">
+<input type="hidden" name="_csrf" value="{{.CSRF}}">
+<input type="hidden" name="preview_id" value="{{.ImportPreview.ID}}">
+{{if or .ImportPreview.FilenameDuplicates .ImportPreview.ExistingDuplicates}}
+<div class="form-check mb-3"><input class="form-check-input" type="checkbox" name="duplicate_names" value="skip" id="omitNames" required>
+<label class="form-check-label" for="omitNames">Entiendo que los nombres WAV repetidos se omitirán, sin eliminar trabajos existentes.</label></div>
+{{end}}
+<fieldset class="mb-3"><legend class="fs-6">¿Qué hacer con los textos repetidos?</legend>
+<div class="form-check"><input class="form-check-input" type="radio" name="duplicate_texts" value="skip" id="omitTexts" required><label class="form-check-label" for="omitTexts">Omitir textos repetidos (recomendado)</label></div>
+<div class="form-check"><input class="form-check-input" type="radio" name="duplicate_texts" value="keep" id="keepTexts" required><label class="form-check-label" for="keepTexts">Conservar textos repetidos si tienen distinto nombre WAV</label></div>
+</fieldset>
+<button type="submit" class="btn btn-primary">Confirmar importación</button>
+<a class="btn btn-outline-secondary" href="/settings">Cancelar</a>
+</form>
+{{end}}
+<form method="post" action="/import" enctype="multipart/form-data"><input type="hidden" name="_csrf" value="{{.CSRF}}"><label for="csv" class="form-label">Archivo de metadatos</label><input id="csv" class="form-control mb-3" type="file" name="csv" accept=".csv,text/csv,.txt" required><button type="submit" class="btn btn-primary"><i class="bi bi-upload me-1"></i> Analizar CSV</button></form>
 </div></div></div>
 <div class="col-lg-6"><div class="card"><div class="card-header"><h3 class="card-title">Voz de referencia</h3></div><div class="card-body">
 {{if .HasReference}}<p class="text-success"><i class="bi bi-check-circle me-1"></i> Voz disponible · actualizada {{date .Reference.UpdatedAt}}</p><div class="mb-3"><audio controls preload="none" class="w-100" src="/reference.wav"></audio></div><p class="small text-secondary">SHA256: <code>{{.Reference.SHA256}}</code></p>{{else}}<p class="text-body-secondary">Aún no se ha cargado una voz de referencia.</p>{{end}}
