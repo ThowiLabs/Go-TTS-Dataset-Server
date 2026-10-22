@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -264,4 +266,58 @@ func (a *App) sweep(done <-chan struct{}) {
 			}
 		}
 	}
+}
+
+// importCompleted stores an existing WAV only for a matching pending filename.
+// It never overwrites completed/processing jobs or invents new CSV rows.
+func (s *Store) importCompleted(name, sha, temp, identity string) (string, error) {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	var id int64
+	var status, path string
+	err = tx.QueryRow("SELECT id,status,audio_path FROM jobs WHERE filename=? COLLATE NOCASE", name).Scan(&id, &status, &path)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "not_found", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if status == "completed" {
+		// A retry is idempotent only if the already stored WAV actually matches.
+		stored, err := os.ReadFile(path)
+		if err != nil {
+			return "", err
+		}
+		hash := sha256.Sum256(stored)
+		if hex.EncodeToString(hash[:]) == sha {
+			return "already_complete", nil
+		}
+		return "conflict", nil
+	}
+	if status != "pending" {
+		return "conflict", nil
+	}
+	now := time.Now().Unix()
+	target := filepath.Join(s.root, "wavs", fmt.Sprintf("%d-%s.wav", id, randomToken(8)))
+	if err := os.Rename(temp, target); err != nil {
+		return "", err
+	}
+	result, err := tx.Exec("UPDATE jobs SET status='completed',audio_path=?,completed_at=?,updated_at=?,error='' WHERE id=? AND status='pending'", target, now, now, id)
+	if err != nil {
+		os.Remove(target)
+		return "", err
+	}
+	n, err := result.RowsAffected()
+	if err != nil || n != 1 {
+		os.Remove(target)
+		return "conflict", err
+	}
+	if err := tx.Commit(); err != nil {
+		os.Remove(target)
+		return "", err
+	}
+	return "imported", nil
 }

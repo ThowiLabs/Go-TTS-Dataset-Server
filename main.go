@@ -273,6 +273,7 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /api/v1/jobs/claim", a.needWorker(a.claimJob))
 	m.HandleFunc("POST /api/v1/jobs/{id}/heartbeat", a.needWorker(a.heartbeatJob))
 	m.HandleFunc("POST /api/v1/jobs/{id}/complete", a.needWorker(a.completeJob))
+	m.HandleFunc("POST /api/v1/jobs/import-completed", a.needWorker(a.importCompletedJob))
 	m.HandleFunc("POST /api/v1/jobs/{id}/fail", a.needWorker(a.failJob))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")

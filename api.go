@@ -400,3 +400,64 @@ func (a *App) retryJob(w http.ResponseWriter, r *http.Request) {
 	}
 	http.Redirect(w, r, "/jobs?status=failed", http.StatusSeeOther)
 }
+
+// importCompletedJob is the resumable pre-generated WAV ingestion endpoint.
+// Workers must authenticate; filename must already exist in the CSV queue.
+func (a *App) importCompletedJob(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<20)
+	if err := r.ParseMultipartForm(4 << 20); err != nil {
+		writeErr(w, 400, "multipart inválido")
+		return
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
+	}
+	name := r.FormValue("filename")
+	digest := strings.ToLower(r.FormValue("sha256"))
+	if !validWavName(name) || len(digest) != 64 {
+		writeErr(w, 400, "filename o sha256 inválidos")
+		return
+	}
+	if _, err := hex.DecodeString(digest); err != nil {
+		writeErr(w, 400, "sha256 inválido")
+		return
+	}
+	input, _, err := r.FormFile("audio")
+	if err != nil {
+		writeErr(w, 400, "falta audio")
+		return
+	}
+	defer input.Close()
+	tmp, err := stageWav(input, filepath.Join(a.cfg.DataDir, "tmp"), 60<<20)
+	if err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	defer os.Remove(tmp)
+	file, err := os.Open(tmp)
+	if err != nil {
+		writeErr(w, 500, "no se pudo verificar audio")
+		return
+	}
+	h := sha256.New()
+	_, err = io.Copy(h, file)
+	file.Close()
+	if err != nil || hex.EncodeToString(h.Sum(nil)) != digest {
+		writeErr(w, 422, "sha256 del audio no coincide")
+		return
+	}
+	state, err := a.db.importCompleted(name, digest, tmp, clientIDFromContext(r.Context()))
+	if err != nil {
+		log.Printf("import completed: %v", err)
+		writeErr(w, 500, "no se pudo importar")
+		return
+	}
+	switch state {
+	case "not_found":
+		writeErr(w, 404, "archivo no existe en dataset")
+	case "conflict":
+		writeErr(w, 409, "archivo en procesamiento o completado con diferente contenido")
+	default:
+		jsonOK(w, map[string]any{"ok": true, "status": state})
+	}
+}
