@@ -10,6 +10,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -225,4 +227,58 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request) {
 }
 func (a *App) workersPage(w http.ResponseWriter, r *http.Request) {
 	a.clientsPage(w, r, "", "", "")
+}
+
+// jobAudio serves only completed WAVs to authenticated panel users.
+// Go's ServeContent supports browser Range requests without preloading the file.
+func (a *App) jobAudio(w http.ResponseWriter, r *http.Request) {
+	id, err := numericID(r)
+	if err != nil {
+		http.Error(w, "Identificador inválido", http.StatusBadRequest)
+		return
+	}
+	var stored string
+	err = a.db.DB.QueryRow("SELECT audio_path FROM jobs WHERE id=? AND status='completed'", id).Scan(&stored)
+	if errors.Is(err, sql.ErrNoRows) || stored == "" {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "Error SQLite", 500)
+		return
+	}
+	base, err := filepath.Abs(filepath.Join(a.cfg.DataDir, "wavs"))
+	if err != nil {
+		http.Error(w, "Ruta inválida", 500)
+		return
+	}
+	abs, err := filepath.Abs(stored)
+	if err != nil {
+		http.Error(w, "Ruta inválida", 500)
+		return
+	}
+	rel, err := filepath.Rel(base, abs)
+	if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) || len(rel) >= 3 && rel[:3] == ".."+string(os.PathSeparator) {
+		http.Error(w, "Ruta inválida", 500)
+		return
+	}
+	file, err := os.Open(abs)
+	if errors.Is(err, os.ErrNotExist) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "Audio no disponible", 500)
+		return
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		http.Error(w, "Audio no disponible", 500)
+		return
+	}
+	w.Header().Set("Content-Type", "audio/wav")
+	w.Header().Set("Content-Disposition", "inline")
+	w.Header().Set("Cache-Control", "private, no-store")
+	http.ServeContent(w, r, filepath.Base(abs), info.ModTime(), file)
 }

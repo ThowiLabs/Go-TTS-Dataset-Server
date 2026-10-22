@@ -12,6 +12,8 @@ Servidor **Go** para coordinar la generación distribuida de audios de datasets 
 - Almacena WAVs en disco y sus rutas en SQLite. Exporta `dataset.zip` con `metadata.csv` y `wavs/<nombre>.wav`, únicamente con los registros completados.
 - Mantiene un WAV de referencia descargable y su hash SHA-256 para caché local de los clientes.
 - Panel AdminLTE con vistas dinámicas renderizadas en Go; sin procesos Node/Python en tiempo de ejecución.
+- **Interfaz en vivo**: Resumen, Trabajos, Clientes y estado de la referencia se sincronizan sin recargar la página cada 5 segundos mientras la pestaña está visible; sin interrumpir formularios ni audios activos.
+- En Trabajos, indicadores de estado/intentos/worker/error con descripción al pasar el cursor; Play/Stop reproduce solo trabajos terminados y **no solicita WAV hasta pulsar Play**. Los WAV se sirven con sesión de administrador y soporte de peticiones HTTP Range.
 
 ## Instalación
 

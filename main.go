@@ -266,6 +266,7 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /jobs/{id}/retry", a.needLogin(a.retryJob))
 	m.HandleFunc("GET /export", a.needLogin(a.exportZIP))
 	m.HandleFunc("GET /reference.wav", a.needLogin(a.referenceDownload))
+	m.HandleFunc("GET /jobs/{id}/audio", a.needLogin(a.jobAudio))
 	m.HandleFunc("GET /api/v1/reference", a.needWorker(a.referenceDownload))
 	m.HandleFunc("GET /api/v1/reference/meta", a.needWorker(a.referenceMetadata))
 	m.HandleFunc("GET /api/v1/stats", a.needWorker(a.statsAPI))

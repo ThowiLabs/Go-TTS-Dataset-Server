@@ -33,7 +33,7 @@
 <div class="card-body table-responsive">
 <table class="table table-hover table-striped align-middle">
 <thead><tr><th>Instancia</th><th>Estado</th><th>Última actividad</th><th>Reservados</th><th>Completados</th><th>Acciones</th></tr></thead>
-<tbody>{{range .Clients}}
+<tbody data-live-region="clients">{{range .Clients}}
 <tr><td><strong>{{.ID}}</strong>{{if .Description}}<div class="text-body-secondary small">{{.Description}}</div>{{end}}<div class="small text-body-secondary">Creado {{date .CreatedAt}}</div></td>
 <td>{{if .RevokedAt}}<span class="badge text-bg-danger">Revocado</span>{{else}}<span class="badge text-bg-success">Habilitado</span>{{end}}</td>
 <td>{{date .LastSeen}}</td><td>{{.Claimed}}</td><td>{{.Completed}}</td>

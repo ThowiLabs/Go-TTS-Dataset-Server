@@ -1,4 +1,5 @@
 {{define "content"}}
+<div data-live-region="dashboard">
 <div class="row g-3">
 <div class="col-lg-3 col-6"><div class="small-box text-bg-primary"><div class="inner"><h3>{{.Stats.Total}}</h3><p>Registros totales</p></div><i class="small-box-icon bi bi-collection"></i><a href="/jobs" class="small-box-footer link-light">Ver registros <i class="bi bi-arrow-right-circle"></i></a></div></div>
 <div class="col-lg-3 col-6"><div class="small-box text-bg-warning"><div class="inner"><h3>{{.Stats.Pending}}</h3><p>Pendientes</p></div><i class="small-box-icon bi bi-hourglass-split"></i><a href="/jobs?status=pending" class="small-box-footer link-dark">Ver pendientes <i class="bi bi-arrow-right-circle"></i></a></div></div>
@@ -14,5 +15,6 @@
 </tbody></table></div></div><div class="card-footer"><a href="/jobs" class="btn btn-outline-primary btn-sm">Todos los trabajos</a></div></div></div>
 <div class="col-lg-4"><div class="card"><div class="card-header"><h3 class="card-title">Errores</h3></div><div class="card-body"><div class="d-flex align-items-center justify-content-between"><span>Trabajos con error</span><h2 class="mb-0 text-danger">{{.Stats.Failed}}</h2></div><p class="text-body-secondary mt-3 mb-0">Los trabajos vencidos se reintentan hasta agotar los intentos configurados.</p></div><div class="card-footer"><a href="/jobs?status=failed" class="btn btn-outline-danger btn-sm">Revisar errores</a></div></div>
 <div class="card"><div class="card-body"><h5 class="card-title">Exportación</h5><p class="card-text">ZIP con los WAV terminados y metadata.csv en formato nombre|texto.</p><a href="/export" class="btn btn-primary"><i class="bi bi-download me-1"></i> Descargar dataset</a></div></div></div>
+</div>
 </div>
 {{end}}
